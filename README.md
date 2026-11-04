@@ -11,7 +11,7 @@ MediSlot is a web app where patients search for a doctor by specialty and city, 
 | Member                | Roll number   | Contribution |
 | --------------------- | ------------- | ------------ |
 | Mohammad Mubeen Khan  | 2024A8PS0489H | TODO         |
-| Aditya Singh          | 2024A8PS0491H | TODO         |
+| Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`) |
 | Priyadarshini Ghosh   | 2024A8PS0479H | TODO         |
 | Potta Avinash         | 2024A8PS0473H | TODO         |
 | Suryanath A           | 2024A8PS0471H | TODO         |
@@ -217,19 +217,32 @@ About 6 clinics, 12 specialties, 30 doctors, 120 patients, 25 medicines, 2,000+ 
 MediSlot/
   README.md
   docs/images/               diagram images
-  schema.sql                 tables, constraints, triggers, functions, views, indexes
-  seed.sql                   seed data (in progress)
-  tests/                     constraint test script (R1 to R9)
-  server/                    Express API (planned)
-  client/                    React (Vite) frontend (planned)
+  db/
+    01_tables.sql            tables, CHECKs, FKs, composite FK (R8), GiST exclusion (R2), partial index
+    02_schedule.sql          availability trigger (R4), status lifecycle (R5), sp_generate_slots
+    03_booking.sql           booking transactions, cancellation, refund calculation
+    04_clinical.sql          prescriptions & reviews (R6)
+    05_reports.sql           views & analytical queries
+    06_indexes.sql           performance indexes
+    seed.sql                 seed data (500+ records)
+    tests/
+      test_schedule.sql      unit test suite for R2, R4, R5, R8 & slot generation
+      test_booking.sql       booking test suite (R1, R3, R7, R9)
+      test_clinical.sql      clinical test suite (R6)
+      run_all.sh             automated runner across 01-06 on fresh DB
+  routes/                    Express route handlers (doctor.js, booking.js, etc.)
+  pages/                     React frontend pages (doctor/, booking/, etc.)
+  report/                    final report sections
 ```
 
 ## Setup (database)
 
-```
+```bash
 createdb medislot
-psql -d medislot -f schema.sql
-psql -d medislot -f seed.sql
+psql -d medislot -f db/01_tables.sql
+psql -d medislot -f db/02_schedule.sql
+# Run test suite
+psql -d medislot -f db/tests/test_schedule.sql
 ```
 
 Requires PostgreSQL 16 with the `btree_gist` extension available.
