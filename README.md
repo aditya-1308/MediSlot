@@ -87,7 +87,7 @@ Rectangles are entities, double rectangles are weak entities, diamonds are relat
 
 ![ER diagram](docs/images/er_diagram.png)
 
-### Same model as an ER diagram (renders on GitHub)
+### Same model as an ER diagram
 
 ```mermaid
 erDiagram
