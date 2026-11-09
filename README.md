@@ -14,7 +14,7 @@ MediSlot is a web app where patients search for a doctor by specialty and city, 
 | Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`) |
 | Priyadarshini Ghosh   | 2024A8PS0479H | TODO         |
 | Potta Avinash         | 2024A8PS0473H | TODO         |
-| Suryanath A           | 2024A8PS0471H | Clinical records and QA: Enforcement of Rule 6 via `BEFORE INSERT OR UPDATE` triggers (`db/04_clinical.sql`), clinical test suite (`db/tests/test_clinical.sql`), master test runner (`db/tests/run_all.sh`), constraint demo scripts (`db/demo/`), related API routes (`routes/records.js`), frontend pages (`pages/records/`), and final report merge (`report/final`). |
+| Suryanath A           | 2024A8PS0471H | Clinical records and QA: Enforcement of Rule 6 via `BEFORE INSERT OR UPDATE` triggers (`db/04_clinical.sql`), clinical test suite (`db/tests/test_clinical.sql`), |
 
 ---
 
