@@ -10,7 +10,7 @@ MediSlot is a web app where patients search for a doctor by specialty and city, 
 
 | Member                | Roll number   | Contribution |
 | --------------------- | ------------- | ------------ |
-| Mohammad Mubeen Khan  | 2024A8PS0489H | TODO         |
+| Mohammad Mubeen Khan  | 2024A8PS0489H | Booking transaction and app core: `sp_book_appointment`, `sp_cancel_appointment`, `fn_refund_amount`, R1/R3 insert trigger, slot-status sync trigger, row and advisory locking, seeding bypass (`db/03_booking.sql`), booking tests and two-session race demo (`db/tests/test_booking.sql`, `db/tests/race/`), Express core (pool, JWT, bcrypt, `requireRole`, transactional signup, `errors.js`), React shell and booking pages |
 | Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`) |
 | Priyadarshini Ghosh   | 2024A8PS0479H | TODO         |
 | Potta Avinash         | 2024A8PS0473H | TODO         |
@@ -246,6 +246,32 @@ psql -d medislot -f db/tests/test_schedule.sql
 ```
 
 Requires PostgreSQL 16 with the `btree_gist` extension available.
+
+Booking layer and its tests:
+
+```bash
+psql -d medislot -f db/03_booking.sql
+psql -d medislot -f db/tests/test_booking.sql
+```
+
+Two-session race (R1), on a seeded database: run `db/tests/race/session_a.sql` in one terminal and, while it waits, `db/tests/race/session_b.sql` in another.
+
+## Setup (application)
+
+```bash
+cd server
+cp .env.example .env        # set DATABASE_URL and JWT_SECRET
+npm install
+npm start                   # API on http://localhost:4000
+```
+
+```bash
+cd client
+npm install
+npm run dev                 # UI on http://localhost:5173, /api proxied to :4000
+```
+
+Adding your area: put an Express router in `server/routes/<area>.js` (mounted at `/api` automatically) and your pages in `client/src/pages/<area>/` with a `routes.jsx` that default-exports `[{ path, element, roles, nav }]` (picked up automatically). Use `requireRole(...)` from `server/auth/requireRole.js` and `api` from `client/src/api.js`. Seeded users need bcrypt password hashes (for example `crypt('password', gen_salt('bf'))` from `pgcrypto`) to be able to log in.
 
 ---
 
