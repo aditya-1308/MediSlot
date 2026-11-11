@@ -30,6 +30,10 @@ DECLARE
     v_appt3_id    INT;
     v_appt4_id    INT;
     v_slots_gen   INT;
+    v_avail_row   availability%ROWTYPE;
+    v_appt_row    appointment%ROWTYPE;
+    v_slot_row    slot%ROWTYPE;
+    v_view_cnt    INT;
     v_test_failed BOOLEAN;
 BEGIN
     RAISE NOTICE '======================================================================';
@@ -278,6 +282,20 @@ BEGIN
     END IF;
     RAISE NOTICE '  [PASS] T3.6: Blocked enclosed availability window (R4 exception)';
 
+    -- T3.7: FAIL - Valid slot_minutes (30) with indivisible window length (09:00-09:40 -> 40m % 30m != 0)
+    v_test_failed := FALSE;
+    BEGIN
+        INSERT INTO availability (doctor_id, weekday, start_time, end_time, slot_minutes)
+        VALUES (v_doc2_uid, 2, TIME '09:00:00', TIME '09:40:00', 30);
+    EXCEPTION
+        WHEN others THEN
+            IF SQLERRM LIKE '%R4:%' THEN v_test_failed := TRUE; END IF;
+    END;
+    IF NOT v_test_failed THEN
+        RAISE EXCEPTION 'TEST FAILED: Allowed indivisible 40-min window with 30-min slots';
+    END IF;
+    RAISE NOTICE '  [PASS] T3.7: Blocked indivisible 40-minute window with 30-minute slots (R4)';
+
     -- ========================================================================
     -- TEST GROUP 4: Rule R5 (Appointment Status Lifecycle & Transitions)
     -- ========================================================================
@@ -452,8 +470,93 @@ BEGIN
     SELECT sp_generate_all_slots(DATE '2026-11-30', DATE '2026-12-06') INTO v_slots_gen;
     RAISE NOTICE '  [PASS] T6.5: sp_generate_all_slots ran across all doctors (% slots created)', v_slots_gen;
 
+    -- ========================================================================
+    -- TEST GROUP 7: Doctor API Helpers & Views
+    -- ========================================================================
+    RAISE NOTICE '[GROUP 7] Doctor API Helpers & Views';
+
+    -- T7.1: sp_add_availability and sp_delete_availability
+    SELECT * INTO v_avail_row FROM sp_add_availability(v_doc1_uid, 3, TIME '10:00:00', TIME '12:00:00', 30);
+    IF v_avail_row.avail_id IS NULL THEN
+        RAISE EXCEPTION 'TEST FAILED: sp_add_availability did not return inserted row';
+    END IF;
+    PERFORM sp_delete_availability(v_doc1_uid, v_avail_row.avail_id);
+    RAISE NOTICE '  [PASS] T7.1: sp_add_availability and sp_delete_availability work cleanly';
+
+    -- T7.2: Ownership check on sp_delete_availability (Doctor 2 cannot delete Doctor 1 row)
+    SELECT * INTO v_avail_row FROM sp_add_availability(v_doc1_uid, 4, TIME '10:00:00', TIME '11:00:00', 30);
+    v_test_failed := FALSE;
+    BEGIN
+        PERFORM sp_delete_availability(v_doc2_uid, v_avail_row.avail_id);
+    EXCEPTION
+        WHEN no_data_found THEN v_test_failed := TRUE;
+    END;
+    IF NOT v_test_failed THEN
+        RAISE EXCEPTION 'TEST FAILED: sp_delete_availability allowed deleting another doctor availability';
+    END IF;
+    RAISE NOTICE '  [PASS] T7.2: Blocked deleting another doctor availability window';
+
+    -- T7.3: sp_set_appointment_status (ownership + R5 lifecycle check)
+    v_test_failed := FALSE;
+    BEGIN
+        PERFORM sp_set_appointment_status(v_doc2_uid, v_appt4_id, 'COMPLETED');
+    EXCEPTION
+        WHEN insufficient_privilege THEN v_test_failed := TRUE;
+    END;
+    IF NOT v_test_failed THEN
+        RAISE EXCEPTION 'TEST FAILED: Doctor 2 updated Doctor 1 appointment';
+    END IF;
+    SELECT * INTO v_appt_row FROM sp_set_appointment_status(v_doc1_uid, v_appt4_id, 'COMPLETED');
+    IF v_appt_row.status <> 'COMPLETED' THEN
+        RAISE EXCEPTION 'TEST FAILED: sp_set_appointment_status did not update to COMPLETED';
+    END IF;
+    v_test_failed := FALSE;
+    BEGIN
+        PERFORM sp_set_appointment_status(v_doc1_uid, v_appt4_id, 'NO_SHOW');
+    EXCEPTION
+        WHEN check_violation THEN
+            IF SQLERRM LIKE 'R5:%' THEN v_test_failed := TRUE; END IF;
+    END;
+    IF NOT v_test_failed THEN
+        RAISE EXCEPTION 'TEST FAILED: sp_set_appointment_status allowed transition out of COMPLETED';
+    END IF;
+    RAISE NOTICE '  [PASS] T7.3: sp_set_appointment_status enforces ownership and R5 lifecycle';
+
+    -- T7.4: sp_toggle_slot_block (FREE <-> BLOCKED, and rejects BOOKED slot with R5)
+    SELECT * INTO v_slot_row FROM sp_toggle_slot_block(v_doc1_uid, v_slot5_id, TRUE);
+    IF v_slot_row.status <> 'BLOCKED' THEN
+        RAISE EXCEPTION 'TEST FAILED: Expected BLOCKED slot status';
+    END IF;
+    SELECT * INTO v_slot_row FROM sp_toggle_slot_block(v_doc1_uid, v_slot5_id, FALSE);
+    IF v_slot_row.status <> 'FREE' THEN
+        RAISE EXCEPTION 'TEST FAILED: Expected FREE slot status after unblock';
+    END IF;
+    UPDATE slot SET status = 'BOOKED' WHERE slot_id = v_slot5_id;
+    v_test_failed := FALSE;
+    BEGIN
+        PERFORM sp_toggle_slot_block(v_doc1_uid, v_slot5_id, TRUE);
+    EXCEPTION
+        WHEN check_violation THEN
+            IF SQLERRM LIKE 'R5:%' THEN v_test_failed := TRUE; END IF;
+    END;
+    IF NOT v_test_failed THEN
+        RAISE EXCEPTION 'TEST FAILED: sp_toggle_slot_block allowed blocking a BOOKED slot';
+    END IF;
+    RAISE NOTICE '  [PASS] T7.4: sp_toggle_slot_block toggles FREE <-> BLOCKED and blocks BOOKED (R5)';
+
+    -- T7.5: Views return expected rows
+    SELECT COUNT(*) INTO v_view_cnt FROM v_doctor_profile WHERE doctor_id = v_doc1_uid;
+    IF v_view_cnt <> 1 THEN
+        RAISE EXCEPTION 'TEST FAILED: v_doctor_profile expected 1 row for doctor, got %', v_view_cnt;
+    END IF;
+    SELECT COUNT(*) INTO v_view_cnt FROM v_doctor_appointments WHERE doctor_id = v_doc1_uid;
+    IF v_view_cnt < 1 THEN
+        RAISE EXCEPTION 'TEST FAILED: v_doctor_appointments returned 0 rows for doctor';
+    END IF;
+    RAISE NOTICE '  [PASS] T7.5: v_doctor_profile and v_doctor_appointments verified';
+
     RAISE NOTICE '======================================================================';
-    RAISE NOTICE 'ALL 27 TESTS PASSED! FULL COMPLIANCE FOR R2, R4, R5, R8 & SCHEDULING';
+    RAISE NOTICE 'ALL 40 SCHEDULE TESTS PASSED (R2, R4, R5, R8, scheduling & views)';
     RAISE NOTICE '======================================================================';
 END;
 $$;
