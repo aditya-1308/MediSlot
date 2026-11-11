@@ -2,11 +2,11 @@
 -- MediSlot: Doctor Appointment Booking System
 -- Group 6 | Aditya Singh (2024A8PS0491H)
 -- File: db/02_schedule.sql
--- Description: Triggers and procedures for doctor scheduling:
+-- Description: Triggers, procedures and views for doctor scheduling:
 --              1. Availability overlap & divisibility trigger (Rule R4)
 --              2. Appointment status lifecycle trigger (Rule R5)
---              3. Slot generation function (sp_generate_slots)
--- Adheres strictly to the project rules and error prefix contract ('R<n>:').
+--              3. Slot generation functions (sp_generate_slots, sp_generate_all_slots)
+--              4. Scheduling/visit helper functions & views for routes/doctor.js
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -16,13 +16,32 @@
 CREATE OR REPLACE FUNCTION fn_check_availability_overlap()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Divisibility check (R4): Window length must be divisible by slot_minutes
-    IF ((EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time))::INT / 60) % NEW.slot_minutes) <> 0 THEN
-        RAISE EXCEPTION 'R4: Availability window (% to %) is not evenly divisible into %-minute slots',
-            NEW.start_time, NEW.end_time, NEW.slot_minutes;
+    IF NEW.weekday NOT BETWEEN 1 AND 7 THEN
+        RAISE EXCEPTION 'R4: Weekday (%) must be between 1 and 7',
+            NEW.weekday
+            USING ERRCODE = 'check_violation';
     END IF;
 
-    -- Overlap check (R4): A doctor cannot have overlapping windows on the same weekday
+    IF NEW.end_time <= NEW.start_time THEN
+        RAISE EXCEPTION 'R4: End time (%) must be after start time (%)',
+            NEW.end_time, NEW.start_time
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF NEW.slot_minutes NOT IN (10, 15, 20, 30, 45, 60) THEN
+        RAISE EXCEPTION 'R4: Slot length (%) must be 10, 15, 20, 30, 45 or 60 minutes',
+            NEW.slot_minutes
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Window duration in seconds must be an exact multiple of slot_minutes
+    IF (EXTRACT(EPOCH FROM (NEW.end_time - NEW.start_time)) % (NEW.slot_minutes * 60)) <> 0 THEN
+        RAISE EXCEPTION 'R4: Availability window (% to %) is not evenly divisible into %-minute slots',
+            NEW.start_time, NEW.end_time, NEW.slot_minutes
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Overlap check: same doctor, same ISO weekday
     IF EXISTS (
         SELECT 1
         FROM availability
@@ -32,7 +51,8 @@ BEGIN
           AND (NEW.start_time, NEW.end_time) OVERLAPS (start_time, end_time)
     ) THEN
         RAISE EXCEPTION 'R4: Doctor % already has an overlapping availability window on weekday %',
-            NEW.doctor_id, NEW.weekday;
+            NEW.doctor_id, NEW.weekday
+            USING ERRCODE = 'exclusion_violation';
     END IF;
 
     RETURN NEW;
@@ -48,30 +68,27 @@ CREATE TRIGGER trg_check_availability_overlap
 -- ----------------------------------------------------------------------------
 -- 2. Rule R5: Appointment Status Lifecycle Trigger
 -- An appointment goes from BOOKED to COMPLETED, NO_SHOW or CANCELLED, and stops there.
--- Enforced via BEFORE UPDATE trigger.
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_appointment_status_lifecycle()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- If status hasn't changed, allow row update (e.g., updating reason text)
     IF OLD.status = NEW.status THEN
         RETURN NEW;
     END IF;
 
-    -- Once in a terminal state, no further status transition is allowed
     IF OLD.status IN ('COMPLETED', 'NO_SHOW', 'CANCELLED') THEN
         RAISE EXCEPTION 'R5: Appointment in terminal state % cannot transition to %',
-            OLD.status, NEW.status;
+            OLD.status, NEW.status
+            USING ERRCODE = 'check_violation';
     END IF;
 
-    -- When starting from BOOKED, allowed transitions are COMPLETED, NO_SHOW, CANCELLED
     IF OLD.status = 'BOOKED' THEN
         IF NEW.status NOT IN ('COMPLETED', 'NO_SHOW', 'CANCELLED') THEN
             RAISE EXCEPTION 'R5: Invalid appointment status transition from % to %',
-                OLD.status, NEW.status;
+                OLD.status, NEW.status
+                USING ERRCODE = 'check_violation';
         END IF;
 
-        -- Maintain cancelled_at timestamp synchronization when cancelled
         IF NEW.status = 'CANCELLED' AND NEW.cancelled_at IS NULL THEN
             NEW.cancelled_at := CURRENT_TIMESTAMP;
         END IF;
@@ -107,23 +124,21 @@ DECLARE
     v_window_end   TIMESTAMPTZ;
     v_slots_count  INT := 0;
 BEGIN
-    -- Basic validation
     IF p_end_date < p_start_date THEN
-        RAISE EXCEPTION 'End date (%) cannot be earlier than start date (%)',
-            p_end_date, p_start_date;
+        RAISE EXCEPTION 'R4: End date (%) cannot be earlier than start date (%)',
+            p_end_date, p_start_date
+            USING ERRCODE = 'check_violation';
     END IF;
 
     IF NOT EXISTS (SELECT 1 FROM doctor WHERE doctor_id = p_doctor_id) THEN
-        RAISE EXCEPTION 'Doctor with ID % does not exist', p_doctor_id;
+        RAISE EXCEPTION 'Doctor with ID % does not exist', p_doctor_id
+            USING ERRCODE = 'no_data_found';
     END IF;
 
-    -- Loop through each date in the range
     v_curr_date := p_start_date;
     WHILE v_curr_date <= p_end_date LOOP
-        -- ISO weekday: 1 = Monday .. 7 = Sunday
         v_iso_dow := EXTRACT(ISODOW FROM v_curr_date)::INT;
 
-        -- Find availability patterns for this doctor and weekday
         FOR v_avail IN
             SELECT start_time, end_time, slot_minutes
             FROM availability
@@ -132,7 +147,6 @@ BEGIN
             ORDER BY start_time ASC
         LOOP
             v_step_mins := v_avail.slot_minutes;
-            -- Construct timestamps in Indian Standard Time (IST, UTC+05:30)
             v_window_start := (v_curr_date + v_avail.start_time) AT TIME ZONE 'Asia/Kolkata';
             v_window_end   := (v_curr_date + v_avail.end_time)   AT TIME ZONE 'Asia/Kolkata';
 
@@ -140,7 +154,6 @@ BEGIN
             WHILE v_slot_start < v_window_end LOOP
                 v_slot_end := v_slot_start + (v_step_mins || ' minutes')::INTERVAL;
 
-                -- Insert slot if not already present (idempotent slot generation)
                 INSERT INTO slot (doctor_id, slot_start, slot_end, status)
                 VALUES (p_doctor_id, v_slot_start, v_slot_end, 'FREE')
                 ON CONFLICT (doctor_id, slot_start) DO NOTHING;
@@ -160,14 +173,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Convenience overload to generate slots for all doctors across a date range
 CREATE OR REPLACE FUNCTION sp_generate_all_slots(
     p_start_date DATE,
     p_end_date DATE
 )
 RETURNS INT AS $$
 DECLARE
-    v_doc RECORD;
+    v_doc   RECORD;
     v_total INT := 0;
     v_count INT;
 BEGIN
@@ -178,3 +190,173 @@ BEGIN
     RETURN v_total;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ----------------------------------------------------------------------------
+-- 4. Doctor API helper functions (used by server/routes/doctor.js)
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION sp_add_availability(
+    p_doctor_id    INT,
+    p_weekday      INT,
+    p_start_time   TIME,
+    p_end_time     TIME,
+    p_slot_minutes INT
+)
+RETURNS availability AS $$
+DECLARE
+    v_row availability%ROWTYPE;
+BEGIN
+    INSERT INTO availability (doctor_id, weekday, start_time, end_time, slot_minutes)
+    VALUES (p_doctor_id, p_weekday, p_start_time, p_end_time, p_slot_minutes)
+    RETURNING * INTO v_row;
+
+    RETURN v_row;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sp_delete_availability(
+    p_doctor_id INT,
+    p_avail_id  INT
+)
+RETURNS BOOLEAN AS $$
+BEGIN
+    DELETE FROM availability
+    WHERE avail_id = p_avail_id
+      AND doctor_id = p_doctor_id;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Availability window % not found', p_avail_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    RETURN TRUE;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Doctor marks a BOOKED visit as COMPLETED or NO_SHOW (Rule R5 applies on UPDATE)
+CREATE OR REPLACE FUNCTION sp_set_appointment_status(
+    p_doctor_id  INT,
+    p_appt_id    INT,
+    p_new_status VARCHAR
+)
+RETURNS appointment AS $$
+DECLARE
+    v_owner_id    INT;
+    v_curr_status VARCHAR;
+    v_appt        appointment%ROWTYPE;
+BEGIN
+    SELECT s.doctor_id, a.status INTO v_owner_id, v_curr_status
+    FROM appointment a
+    JOIN slot s ON s.slot_id = a.slot_id
+    WHERE a.appt_id = p_appt_id
+    FOR UPDATE OF a;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Appointment % does not exist', p_appt_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    IF v_owner_id <> p_doctor_id THEN
+        RAISE EXCEPTION 'Appointment % does not belong to doctor %', p_appt_id, p_doctor_id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    IF p_new_status NOT IN ('COMPLETED', 'NO_SHOW') THEN
+        RAISE EXCEPTION 'R5: Doctors can only mark appointments COMPLETED or NO_SHOW'
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    IF v_curr_status <> 'BOOKED' THEN
+        RAISE EXCEPTION 'R5: Appointment % is in % state and cannot transition to %',
+            p_appt_id, v_curr_status, p_new_status
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    UPDATE appointment
+    SET status = p_new_status
+    WHERE appt_id = p_appt_id
+    RETURNING * INTO v_appt;
+
+    RETURN v_appt;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sp_toggle_slot_block(
+    p_doctor_id INT,
+    p_slot_id   INT,
+    p_block     BOOLEAN
+)
+RETURNS slot AS $$
+DECLARE
+    v_slot slot%ROWTYPE;
+BEGIN
+    SELECT * INTO v_slot FROM slot WHERE slot_id = p_slot_id FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Slot % does not exist', p_slot_id
+            USING ERRCODE = 'no_data_found';
+    END IF;
+
+    IF v_slot.doctor_id <> p_doctor_id THEN
+        RAISE EXCEPTION 'Slot % does not belong to doctor %', p_slot_id, p_doctor_id
+            USING ERRCODE = 'insufficient_privilege';
+    END IF;
+
+    IF v_slot.status = 'BOOKED' THEN
+        RAISE EXCEPTION 'R5: Slot % already has an active booking and cannot be blocked', p_slot_id
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    UPDATE slot
+    SET status = CASE WHEN p_block THEN 'BLOCKED' ELSE 'FREE' END
+    WHERE slot_id = p_slot_id
+    RETURNING * INTO v_slot;
+
+    RETURN v_slot;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ----------------------------------------------------------------------------
+-- 5. Views used by server/routes/doctor.js
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE VIEW v_doctor_profile AS
+SELECT d.doctor_id,
+       u.full_name,
+       u.email,
+       u.phone,
+       d.license_no,
+       d.fee,
+       d.experience_yrs,
+       sp.name     AS specialty,
+       c.name      AS clinic_name,
+       c.address   AS clinic_address,
+       c.city
+FROM doctor d
+JOIN app_user u   ON u.user_id = d.doctor_id
+JOIN specialty sp ON sp.specialty_id = d.specialty_id
+JOIN clinic c     ON c.clinic_id = d.clinic_id;
+
+CREATE OR REPLACE VIEW v_doctor_appointments AS
+SELECT a.appt_id,
+       a.status,
+       a.reason,
+       a.booked_at,
+       a.cancelled_at,
+       s.slot_id,
+       s.doctor_id,
+       s.slot_start,
+       s.slot_end,
+       (s.slot_start AT TIME ZONE 'Asia/Kolkata')::date AS visit_date,
+       p.patient_id,
+       pu.full_name AS patient_name,
+       pu.phone     AS patient_phone,
+       p.dob        AS patient_dob,
+       p.gender     AS patient_gender,
+       EXISTS (
+           SELECT 1
+           FROM prescription_item pi
+           WHERE pi.appt_id = a.appt_id
+       ) AS has_prescription
+FROM appointment a
+JOIN slot s      ON s.slot_id = a.slot_id
+JOIN patient p   ON p.patient_id = a.patient_id
+JOIN app_user pu ON pu.user_id = p.patient_id;
