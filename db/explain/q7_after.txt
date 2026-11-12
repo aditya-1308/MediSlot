@@ -1,0 +1,23 @@
+MediSlot Q7 EXPLAIN ANALYZE — WITH idx_slot_free_doctor_start
+Database: medislot_clean
+City tested: Hyderabad
+Query: Q7 next 3 future FREE slots per doctor
+Rows returned: 15 (5 doctors × 3 slots)
+
+Observed plan:
+- WindowAgg with row_number() run condition <= 3
+- Incremental Sort
+- Nested Loop joins
+- Slot access: Index Scan using idx_slot_free_doctor_start
+- Index condition: doctor_id = u.user_id AND slot_start > now()
+- Total shared buffer hits at WindowAgg: 46
+- Planning Time: 1.644 ms
+- Execution Time: 1.279 ms
+
+Interpretation:
+The partial index for FREE slots was used. In this single captured run,
+the elapsed execution time was higher than the run without the partial
+index (1.279 ms versus 0.816 ms). These very small timings are subject to
+cache and run-to-run variation. Do not claim a demonstrated speedup from
+this single comparison; repeat tests under controlled conditions before
+making a performance-improvement claim.

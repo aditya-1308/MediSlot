@@ -1,0 +1,22 @@
+MediSlot Q7 EXPLAIN ANALYZE — WITHOUT idx_slot_free_doctor_start
+Database: medislot_clean
+City tested: Hyderabad
+Query: Q7 next 3 future FREE slots per doctor
+Rows returned: 15 (5 doctors × 3 slots)
+
+Observed plan:
+- WindowAgg with row_number() run condition <= 3
+- Incremental Sort
+- Nested Loop joins
+- Slot access: Index Scan using uq_slot_doctor_start
+- Index condition: doctor_id = u.user_id AND slot_start > now()
+- Filter: status = 'FREE'
+- Slot buffers shown: shared hit=31
+- Total shared buffer hits at WindowAgg: 45
+- Planning Time: 1.741 ms
+- Execution Time: 0.816 ms
+
+Interpretation:
+The existing unique index on (doctor_id, slot_start) was used. PostgreSQL
+then filtered candidate rows by status = 'FREE'. This is a measured result
+from one execution, not a repeated benchmark.

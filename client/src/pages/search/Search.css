@@ -1,0 +1,123 @@
+
+.search-page .pagehead {
+  margin-bottom: 1.25rem;
+}
+
+.search-form {
+  margin-bottom: 1.5rem;
+}
+
+.search-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.search-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  font-size: .9rem;
+  font-weight: 500;
+}
+
+.search-grid input,
+.search-grid select {
+  width: 100%;
+}
+
+.search-actions {
+  display: flex;
+  gap: .75rem;
+  margin-top: 1.25rem;
+}
+
+.search-actions .secondary {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.search-results-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.doctor-card {
+  margin-bottom: 1rem;
+}
+
+.doctor-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.doctor-info h2 {
+  margin-bottom: .25rem;
+}
+
+.doctor-specialty {
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0;
+}
+
+.doctor-fee {
+  font-size: 1.1rem;
+  white-space: nowrap;
+}
+
+.doctor-details {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+  color: var(--muted);
+  font-size: .9rem;
+  margin: 1rem 0;
+}
+
+.available-slots {
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.available-slots h3 {
+  font-size: .95rem;
+  margin: 0 0 .75rem;
+}
+
+.slot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.slot-row:last-child {
+  border-bottom: none;
+}
+
+.slot-row p {
+  margin: .25rem 0 0;
+}
+
+@media (max-width: 600px) {
+  .search-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .doctor-info {
+    flex-direction: column;
+  }
+
+  .search-results-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: .3rem;
+  }
+}
