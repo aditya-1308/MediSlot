@@ -175,40 +175,82 @@ React frontend ↔ Express API ↔ PostgreSQL 16.
 
 The API stays thin on purpose: it checks the token and role, calls the SQL functions or runs the queries, and turns database errors (unique, check, exclusion, trigger) into readable messages.
 
-### Planned workflows
+### Workflows implemented
 
-- **W1: Book an appointment (transaction).** The patient searches by specialty and city, picks a free slot and pays through a simulated gateway. The API calls `sp_book_appointment`, which locks the slot row, inserts the appointment (triggers check the slot is free and the patient has no clash, and mark the slot as booked) and inserts the payment with the fee snapshot. If anything fails, everything rolls back and the slot stays free.
-- **W2: Admin reports.** Dashboard with doctor utilisation, no-show rate per clinic, top specialties per city, revenue per clinic per month and the most prescribed medicines, built on views, CTEs and window functions.
-- **W3: Constraint demo.** Two browser tabs book the same slot (the second is turned away), a patient books two overlapping slots, a review is posted before the visit is completed, an overlapping availability window is added. In each case the UI shows the database's own error message.
+- **W1: Book an appointment (atomic transaction).** The patient searches doctors by specialty, city, or date, chooses an available slot, and books via `/api/booking/book`. The backend invokes `sp_book_appointment`, which:
+  1. Acquires a patient-level transactional advisory lock (`pg_advisory_xact_lock(4801, patient_id)`) to prevent concurrent overlapping bookings by the same patient.
+  2. Locks the target slot row (`SELECT ... FOR UPDATE`), asserting current status is `FREE` and slot start time is strictly in the future (R9).
+  3. Inserts the appointment record and verifies against R1 (no double booking) and R3 (no patient time clash) via database triggers.
+  4. Inserts the payment record, snapshotting the doctor's active consultation fee and payment method (`CASH`, `CARD`, `UPI`).
+  5. The `AFTER INSERT` trigger automatically synchronizes `slot.status` to `BOOKED`. If any step fails, the entire transaction rolls back cleanly.
 
-Smaller flows: cancelling with a refund (`sp_cancel_appointment`), a doctor generating slots from the weekly pattern (`sp_generate_slots`), and a doctor completing a visit and writing a prescription.
+- **W2: Admin portal and reporting views.** The admin dashboard (`/admin`) provides platform-wide oversight:
+  1. System metrics cards: registered clinics, specialties, medicines, doctor/patient counts, active bookings, and net revenue.
+  2. Master catalogue management: interactive CRUD for medical specialties and medicines (form, dosage, strength).
+  3. Clinics overview: view doctor counts per clinic registered by doctors.
+  4. Reporting suite: real-time query rendering for `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue`, and analytical queries Q1–Q7.
+
+- **W3: Clinical records and Rule 6 constraint demonstration.**
+  1. Doctors view their daily schedule (`/doctor`), mark appointments as `COMPLETED` or `NO_SHOW` (R5 lifecycle enforcement), and issue prescriptions (`/visits/:apptId/prescription`).
+  2. Patients view consultation history (`/appointments`), read prescriptions, and submit reviews (1–5 stars with comments).
+  3. Rule 6 is strictly enforced at the database level by `BEFORE INSERT OR UPDATE` triggers on `prescription_item` and `review`. Attempting to prescribe or review a `BOOKED` or `CANCELLED` visit terminates immediately with `R6: Prescriptions and reviews are only allowed for completed appointments`.
+
+- **Additional core workflows:**
+  - **Appointment cancellation & tiered refunds (`sp_cancel_appointment`):** Locks the appointment, evaluates `fn_refund_amount` (100% ≥ 24 h, 50% for 2–24 h, 0% < 2 h), updates payment status to `REFUNDED` / `PARTIALLY_REFUNDED` / `COMPLETED`, releases the slot back to `FREE`, and records `cancelled_at` timestamp.
+  - **Automated slot generation (`sp_generate_slots` / `sp_generate_all_slots`):** Expands doctors' weekly availability windows into discrete time-bound slots across target date ranges, guarded against duplicates and overlaps by the GiST exclusion constraint (R2).
+  - **Doctor registration with clinic creation:** Doctors can sign up (`/signup/doctor`) by selecting an existing clinic or creating a new clinic on the fly in a single atomic transaction.
 
 ---
 
 ## DBMS features
 
-| Feature      | Objects |
-| ------------ | ------- |
-| Transactions | Row locks (`FOR UPDATE`) and a per-patient advisory lock in `sp_book_appointment` and `sp_cancel_appointment` |
-| Triggers (6) | availability overlap, appointment before insert, slot status sync, status lifecycle, review check, prescription check |
-| Functions (4) | `sp_book_appointment`, `sp_cancel_appointment`, `sp_generate_slots`, `fn_refund_amount` |
-| Views (3)    | `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue` |
-| Indexes      | Partial index on free slots, gist exclusion index, supporting btree indexes |
+| Feature | Objects & Implementation |
+| ------- | ------------------------ |
+| **Transactions & Concurrency** | Row-level locks (`SELECT ... FOR UPDATE`), transaction-level advisory locks (`pg_advisory_xact_lock(4801, patient_id)`), atomic multi-table stored procedures (`sp_book_appointment`, `sp_cancel_appointment`), READ COMMITTED isolation. |
+| **Triggers (7)** | `trg_check_availability_overlap` (`availability`), `trg_check_appointment_clash` (`appointment`), `trg_sync_slot_status` (`appointment`), `trg_appointment_status_lifecycle` (`appointment`), `trg_protect_booked_slots` (`slot`), `trg_enforce_r6_prescription` (`prescription_item`), `trg_enforce_r6_review` (`review`). |
+| **Functions & Procedures (7)** | `sp_book_appointment`, `sp_cancel_appointment`, `sp_generate_slots`, `sp_generate_all_slots`, `fn_refund_amount`, `fn_check_completed_appointment`, `fn_check_availability_overlap`. |
+| **Views (7)** | `v_slot_details`, `v_patient_appointments`, `v_doctor_appointments`, `v_doctor_profile`, `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue`. |
+| **Indexes (7)** | GiST exclusion constraint (`slot_no_overlap`), partial unique index (`idx_appointment_slot_active`), partial B-tree (`idx_slot_doctor_start_status`), composite indexes (`idx_doctor_specialty_clinic`, `idx_appointment_patient`, `idx_payment_appt`, `idx_clinic_city`). |
 
-### Planned SQL queries
+---
 
-- Doctor utilisation: booked slots against offered slots per doctor, using `v_doctor_utilisation`.
-- No-show rate per clinic, with `GROUP BY` and `HAVING`.
-- Top specialties per city with `RANK() OVER (PARTITION BY city)`.
-- Doctors whose average rating beats the average of their specialty, with a CTE and a subquery.
-- Patients with two or more completed visits to the same doctor.
-- The next three free slots per doctor in a city, with `ROW_NUMBER()`.
-- Most prescribed medicines per specialty (four-table join).
-- Monthly net revenue per clinic from `v_clinic_revenue`.
+## Analytical SQL queries (Q1–Q7)
 
-### Seed data (planned)
+All seven analytical queries are implemented in `db/07_queries.sql` and `queries/q7_next_free_slots.sql`, and accessible via the admin reports interface:
 
-About 6 clinics, 12 specialties, 30 doctors, 120 patients, 25 medicines, 2,000+ generated slots, 400 appointments with their payments, 250 prescription items and 120 reviews, comfortably past the 500-record mark.
+- **Q1: Peak Booking Hours:** Groups slot start timestamps by `EXTRACT(HOUR FROM s.slot_start)` to evaluate diurnal booking distributions.
+- **Q2: Doctor Performance vs Specialty Benchmark:** Uses Common Table Expressions (CTEs) and subqueries to calculate average ratings per specialty and identify doctors who outperform their specialty average.
+- **Q3: Top Doctors by Completed Visits:** Utilizes `DENSE_RANK() OVER (ORDER BY completed_count DESC)` to rank doctors across the platform.
+- **Q4: Patient Retention Analysis:** Aggregates completed visits grouped by `(patient_id, doctor_id)` with `HAVING COUNT(a.appt_id) >= 2` to highlight repeat consultations.
+- **Q5: Revenue Distribution by Payment Method:** Evaluates gross revenue, total refund liabilities, and net revenue split across `CASH`, `CARD`, and `UPI`.
+- **Q6: Doctor Cancellation Rate:** Identifies practitioners with elevated cancellation frequencies using conditional aggregation and `HAVING`.
+- **Q7: Next Three Free Slots per Doctor:** Implemented in `queries/q7_next_free_slots.sql` using window function `ROW_NUMBER() OVER (PARTITION BY s.doctor_id ORDER BY s.slot_start)`. Validated with before/after `EXPLAIN ANALYZE` benchmarks in `db/explain/` showing acceleration from index-only scans.
+
+---
+
+## Seed dataset
+
+The database includes a realistic dataset defined in `db/seed.sql` comprising 500+ records:
+- 6 Clinics across Hyderabad, Bengaluru, and Mumbai.
+- 12 Medical Specialties (Cardiology, Dermatology, Orthopedics, Pediatrics, etc.).
+- 30 Doctors with verified licenses, experience records, and consultation fees.
+- 120 Patients with demographics and dates of birth.
+- 25 Medicines with standard dosage forms (`TABLET`, `CAPSULE`, `SYRUP`, `INJECTION`, `OINTMENT`, `DROPS`, `OTHER`).
+- 2,000+ Concrete Slots generated from weekly doctor availability patterns.
+- 400 Appointments with associated payments (seeded through `sp_book_appointment` and `sp_cancel_appointment` under `SET medislot.seeding = 'on'` to maintain relational consistency and accurate refund amounts).
+- 250 Prescription Items and 120 Patient Reviews.
+- Platform Admin account: `admin@medislot.demo` / `admin123`.
+
+---
+
+## Test suite and automated runner
+
+The project includes automated SQL test suites covering all business rules:
+- `db/tests/test_schedule.sql`: 40 transactional assertions validating availability intervals, slot generation, appointment lifecycle transitions, and doctor views.
+- `db/tests/test_booking.sql`: 27 assertions verifying R1 (no double booking), R3 (no patient overlap), R7 (refund edge cases at 24 h and 2 h), R9 (no booking past slots), advisory locking, and view outputs.
+- `db/tests/test_clinical.sql`: Verifies positive and negative scenarios for Rule 6 (prescriptions and reviews permitted on completed visits; rejected on booked visits).
+- `db/tests/race/`: Two-session concurrent race script demonstrating physical row-lock serialisation on double-booking attempts.
+- `db/tests/runall.sh`: Shell script running schema initialization, seed data loading, and all unit tests in a clean sequence with `ON_ERROR_STOP=1`.
 
 ---
 
@@ -274,6 +316,17 @@ npm run dev                 # UI on http://localhost:5173, /api proxied to :4000
 ```
 
 Adding your area: put an Express router in `server/routes/<area>.js` (mounted at `/api` automatically) and your pages in `client/src/pages/<area>/` with a `routes.jsx` that default-exports `[{ path, element, roles, nav }]` (picked up automatically). Use `requireRole(...)` from `server/auth/requireRole.js` and `api` from `client/src/api.js`. Seeded users need bcrypt password hashes (for example `crypt('password', gen_salt('bf'))` from `pgcrypto`) to be able to log in.
+
+---
+
+## Individual contribution reports
+
+Full technical documentation and design write-ups by each team member are located in the `report/` directory:
+- [Mohammad Mubeen Khan (`report/mubeen.md`)](file:///d:/MediSlot/report/mubeen.md): Atomic booking transaction (`sp_book_appointment`), cancellation & tiered refund calculation (`sp_cancel_appointment`, `fn_refund_amount`), R1/R3 database triggers, row and advisory locking, seeding bypass, Express core, and booking UI.
+- [Aditya Singh (`report/aditya.md`)](file:///d:/MediSlot/report/aditya.md): Relational schema design, BCNF normalisation, composite subtype foreign keys (R8), GiST exclusion constraints (R2), weekly availability and slot generation routines (`sp_generate_slots`), doctor routes, and scheduling interface.
+- [Potta Avinash (`report/avinash.md`)](file:///d:/MediSlot/report/avinash.md): Transaction-consistent seed dataset (500+ records across 30 doctors and 120 patients), 5 custom performance B-tree and partial indexes (`db/06_indexes.sql`), EXPLAIN execution plan benchmarking, window query Q7 (`queries/q7_next_free_slots.sql`), doctor search API, and search UI.
+- [Priyadarshini Ghosh (`report/priyadarshini.md`)](file:///d:/MediSlot/report/priyadarshini.md): Analytical database views (`v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue`), advanced SQL analytics suite (Q1–Q6 in `db/07_queries.sql`), admin API endpoints (`server/routes/admin.js`), and admin portal interface (`client/src/pages/admin/`).
+- [Suryanath A (`report/suryanath.md`)](file:///d:/MediSlot/report/suryanath.md): Database enforcement of Rule 6 via `BEFORE INSERT OR UPDATE` triggers on `prescription_item` and `review`, transactional clinical test suite (`db/tests/test_clinical.sql`), clinical API routes, and prescription/review user interface.
 
 ---
 
