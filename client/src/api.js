@@ -75,3 +75,21 @@ export function formatWhen(ts) {
 export function formatRupees(n) {
   return `₹${Number(n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
+
+// "Dr Kavya Rao" -> "KR" (for avatars)
+export function initials(name = '') {
+  const parts = name.replace(/^Dr\.?\s+/i, '').split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
+}
+
+// Pieces of an IST date for the calendar tile: { month: 'Nov', day: '16' }
+export function dateParts(ts) {
+  const d = new Date(ts);
+  const opt = { timeZone: 'Asia/Kolkata' };
+  return {
+    month: d.toLocaleString('en-IN', { ...opt, month: 'short' }),
+    day: d.toLocaleString('en-IN', { ...opt, day: 'numeric' }),
+    time: d.toLocaleString('en-IN', { ...opt, hour: 'numeric', minute: '2-digit' }),
+    weekday: d.toLocaleString('en-IN', { ...opt, weekday: 'long' }),
+  };
+}

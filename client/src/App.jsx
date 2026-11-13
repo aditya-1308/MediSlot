@@ -12,6 +12,7 @@
 
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { RequireRole, useAuth } from './auth/AuthContext';
+import { initials } from './api';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
 
@@ -28,7 +29,12 @@ function Header() {
     : [];
   return (
     <header className="topbar">
-      <NavLink to="/" className="brand">MediSlot</NavLink>
+      <NavLink to="/" className="brand">
+        <span className="mark" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5.5 1h5v4.5H15v5h-4.5V15h-5v-4.5H1v-5h4.5z" fill="currentColor" /></svg>
+        </span>
+        <span>Medi<b>Slot</b></span>
+      </NavLink>
       <nav>
         {links.map((r) => (
           <NavLink key={r.path} to={r.path}>{r.nav}</NavLink>
@@ -37,8 +43,9 @@ function Header() {
       <div className="who">
         {user ? (
           <>
-            <span>{user.name} · {user.role.toLowerCase()}</span>
-            <button className="link" onClick={logout}>Log out</button>
+            <span className="avatar" aria-hidden="true">{initials(user.name)}</span>
+            <span className="name"><strong>{user.name}</strong><small>{user.role.toLowerCase()}</small></span>
+            <button className="ghost" onClick={logout}>Log out</button>
           </>
         ) : (
           <NavLink to="/login">Log in</NavLink>
