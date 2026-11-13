@@ -66,7 +66,7 @@ router.get('/admin/dashboard', async (req, res, next) => {
           (SELECT COUNT(*)::int
              FROM slot s
              JOIN doctor d ON d.doctor_id = s.doctor_id
-            WHERE d.clinic_id = $1 AND s.status = 'OPEN' AND s.slot_start >= NOW()) AS open_slots,
+            WHERE d.clinic_id = $1 AND s.status = 'FREE' AND s.slot_start >= NOW()) AS open_slots,
           (SELECT COUNT(*)::int
              FROM appointment a
              JOIN slot s ON s.slot_id = a.slot_id
@@ -326,7 +326,7 @@ router.get('/admin/slots', async (req, res, next) => {
              s.slot_start,
              s.slot_end,
              s.status,
-             (s.status <> 'OPEN' OR a.appt_id IS NOT NULL) AS is_booked,
+             (s.status <> 'FREE' OR a.appt_id IS NOT NULL) AS is_booked,
              a.appt_id,
              a.status AS appt_status,
              u_pat.full_name AS patient_name
@@ -411,7 +411,7 @@ router.post('/admin/slots', async (req, res, next) => {
     for (const [sStart, sEnd] of intervals) {
       const ins = await db.query(
         `INSERT INTO slot (doctor_id, slot_start, slot_end, status)
-         VALUES ($1, $2, $3, 'OPEN')
+         VALUES ($1, $2, $3, 'FREE')
          RETURNING slot_id, doctor_id, slot_start, slot_end, status`,
         [Number(doctor_id), sStart.toISOString(), sEnd.toISOString()]
       );
@@ -452,7 +452,7 @@ router.put('/admin/slots/:id', async (req, res, next) => {
     if (!existing.rowCount) {
       return res.status(404).json({ error: 'Slot not found in your clinic.' });
     }
-    if (existing.rows[0].status !== 'OPEN') {
+    if (existing.rows[0].status !== 'FREE') {
       return res.status(409).json({ error: 'Booked or closed slots cannot be modified.' });
     }
 
@@ -496,7 +496,7 @@ router.delete('/admin/slots/:id', async (req, res, next) => {
     if (!existing.rowCount) {
       return res.status(404).json({ error: 'Slot not found in your clinic.' });
     }
-    if (existing.rows[0].status !== 'OPEN') {
+    if (existing.rows[0].status !== 'FREE') {
       return res.status(409).json({ error: 'Booked slots cannot be deleted.' });
     }
 
