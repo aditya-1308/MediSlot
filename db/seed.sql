@@ -59,7 +59,9 @@ WHERE name IN (
 );
 
 -- ---------------------------------------------------------------------------
--- 2. Demo doctors and patients
+-- 2. Demo doctors, patients and admin
+--    Every demo account logs in with the password: demo1234
+--    doctor1..30@medislot.demo, patient1..120@medislot.demo, admin@medislot.demo
 -- ---------------------------------------------------------------------------
 
 CREATE TEMP TABLE seed_doctor_users (
@@ -78,7 +80,7 @@ WITH inserted AS (
         'Dr Demo ' || doctor_no,
         email,
         '90000' || LPAD(doctor_no::TEXT, 5, '0'),
-        '$2b$10$.O2.cH/5NN0kNc0diRSYaOoukB0/UdQ69jCxkUkS7dvXB4q/Kf.VG',
+        '$2a$10$O7OBpRJMNSNFa4vqeCu.t.TE04Sg6bEep7LrhiEQuSrh0ufrXymdS',
         'DOCTOR'
     FROM seed_doctor_users
     ORDER BY doctor_no
@@ -121,7 +123,7 @@ WITH inserted AS (
         'Demo Patient ' || patient_no,
         email,
         '80000' || LPAD(patient_no::TEXT, 5, '0'),
-        '$2b$10$.O2.cH/5NN0kNc0diRSYaOoukB0/UdQ69jCxkUkS7dvXB4q/Kf.VG',
+        '$2a$10$O7OBpRJMNSNFa4vqeCu.t.TE04Sg6bEep7LrhiEQuSrh0ufrXymdS',
         'PATIENT'
     FROM seed_patient_users
     ORDER BY patient_no
@@ -138,6 +140,11 @@ SELECT
     DATE '1980-01-01' + ((patient_no * 73) % 14000),
     CASE patient_no % 3 WHEN 0 THEN 'M' WHEN 1 THEN 'F' ELSE 'O' END
 FROM seed_patient_users;
+
+-- Admin: an app_user with no subtype row (partial specialisation)
+INSERT INTO app_user (full_name, email, phone, password_hash, role)
+VALUES ('Demo Admin', 'admin@medislot.demo', '7000000001',
+        '$2a$10$O7OBpRJMNSNFa4vqeCu.t.TE04Sg6bEep7LrhiEQuSrh0ufrXymdS', 'ADMIN');
 
 -- ---------------------------------------------------------------------------
 -- 3. Medicines

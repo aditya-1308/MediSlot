@@ -271,6 +271,8 @@ npm install
 npm run dev                 # UI on http://localhost:5173, /api proxied to :4000
 ```
 
+Demo logins after loading `db/seed.sql` (password `demo1234` for all): `patient1@medislot.demo` to `patient120@...`, `doctor1@medislot.demo` to `doctor30@...`, and `admin@medislot.demo`.
+
 Adding your area: put an Express router in `server/routes/<area>.js` (mounted at `/api` automatically) and your pages in `client/src/pages/<area>/` with a `routes.jsx` that default-exports `[{ path, element, roles, nav }]` (picked up automatically). Use `requireRole(...)` from `server/auth/requireRole.js` and `api` from `client/src/api.js`. Seeded users need bcrypt password hashes (for example `crypt('password', gen_salt('bf'))` from `pgcrypto`) to be able to log in.
 
 ---
