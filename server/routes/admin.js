@@ -1,4 +1,4 @@
-// MediSlot | server/routes/admin.js
+// MediSlot | Priyadarshini Ghosh | server/routes/admin.js
 // Admin-only management and reporting endpoints. Mounted at /api/admin.
 //
 //   GET  /api/admin/stats

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- MediSlot: Doctor Appointment Booking System
--- Group 6 | Priyadarshini Ghosh
+-- Group 6 | Suryanath A
 -- File: db/tests/test_clinical.sql
 -- Description: Test suite for Rule R6 (prescriptions and reviews only on
 --              COMPLETED appointments). Tests both positive and negative cases.

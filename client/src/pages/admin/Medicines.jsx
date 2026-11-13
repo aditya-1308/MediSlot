@@ -1,3 +1,4 @@
+// MediSlot | Priyadarshini Ghosh | client/src/pages/admin/Medicines.jsx
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';

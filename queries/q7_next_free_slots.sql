@@ -1,4 +1,5 @@
 
+-- MediSlot | Potta Avinash | queries/q7_next_free_slots.sql
 -- Q7: Find the next 3 available slots for each doctor
 -- in Hyderabad.
 

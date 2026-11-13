@@ -1,4 +1,9 @@
--- Enforcement of R6: Reviews and prescriptions are only allowed for completed appointments
+-- ============================================================================
+-- MediSlot: Doctor Appointment Booking System
+-- Group 6 | Suryanath A
+-- File: db/04_clinical.sql
+-- Description: Enforcement of R6: Reviews and prescriptions are only allowed for completed appointments
+-- ============================================================================
 
 CREATE OR REPLACE FUNCTION fn_check_completed_appointment()
 RETURNS TRIGGER AS $$

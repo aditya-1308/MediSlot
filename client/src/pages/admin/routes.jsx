@@ -1,3 +1,4 @@
+// MediSlot | Priyadarshini Ghosh | client/src/pages/admin/routes.jsx
 import Dashboard from './Dashboard';
 import Specialties from './Specialties';
 import Medicines from './Medicines';

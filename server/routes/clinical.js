@@ -1,4 +1,4 @@
-// MediSlot | server/routes/clinical.js
+// MediSlot | Suryanath A | server/routes/clinical.js
 // Prescription and review endpoints. Mounted at /api/clinical.
 //
 //   GET  /api/clinical/medicines                    public — medicine catalogue
