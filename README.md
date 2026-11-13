@@ -29,10 +29,10 @@ Completed: requirements and business rules, the ER diagram (below), relational m
 | Normalisation (all 12 relations in BCNF)           | Done        |
 | Schema: 12 tables, 6 triggers, 4 functions, 3 views | Done        |
 | Test script (39 checks covering R1 to R9)          | Done        |
-| Seed data (500+ records)                           | In progress |
-| Express API and JWT authentication                 | Planned     |
-| React (Vite) frontend                              | Planned     |
-| Admin reports and constraint demo                  | Planned     |
+| Seed data (500+ records)                           | Done |
+| Express API and JWT authentication                 |Done     |
+| React (Vite) frontend                              | Done    |
+| Admin reports and constraint demo                  | Done    |
 
 ---
 
