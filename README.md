@@ -13,7 +13,7 @@ MediSlot is a web app where patients search for a doctor by specialty and city, 
 | Mohammad Mubeen Khan  | 2024A8PS0489H | Booking transaction and app core: `sp_book_appointment`, `sp_cancel_appointment`, `fn_refund_amount`, R1/R3 insert trigger, slot-status sync trigger, row and advisory locking, seeding bypass (`db/03_booking.sql`), booking tests and two-session race demo (`db/tests/test_booking.sql`, `db/tests/race/`), Express core (pool, JWT, bcrypt, `requireRole`, transactional signup, `errors.js`), React shell and booking pages |
 | Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`) |
 | Priyadarshini Ghosh   | 2024A8PS0479H | TODO         |
-| Potta Avinash         | 2024A8PS0473H | TODO         |
+| Potta Avinash         | 2024A8PS0473H |Data and performance: Database seeding and test-data generation (`db/seed.sql`), performance indexes and query optimization (`db/06_indexes.sql`), Q7 next-free-slots query (`db/queries/q7_next_free_slots.sql`), before/after query execution plan analysis (`db/explain/`), doctor search API (`server/routes/search.js`), and React doctor search page with doctor-name, city, specialty and appointment-date filters (`client/src/pages/search/`).|
 | Suryanath A           | 2024A8PS0471H | Clinical records and QA: Enforcement of Rule 6 via `BEFORE INSERT OR UPDATE` triggers (`db/04_clinical.sql`), clinical test suite (`db/tests/test_clinical.sql`), |
 
 ---
