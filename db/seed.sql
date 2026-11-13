@@ -139,6 +139,11 @@ SELECT
     CASE patient_no % 3 WHEN 0 THEN 'M' WHEN 1 THEN 'F' ELSE 'O' END
 FROM seed_patient_users;
 
+-- admin@medislot.demo / admin123
+INSERT INTO app_user (full_name, email, phone, password_hash, role)
+VALUES ('Admin', 'admin@medislot.demo', '9999999999',
+        '$2b$10$.O2.cH/5NN0kNc0diRSYaOoukB0/UdQ69jCxkUkS7dvXB4q/Kf.VG', 'ADMIN');
+
 -- ---------------------------------------------------------------------------
 -- 3. Medicines
 -- ---------------------------------------------------------------------------

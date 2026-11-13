@@ -17,12 +17,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger now guards both INSERT and UPDATE operations
+DROP TRIGGER IF EXISTS trg_enforce_r6_prescription ON prescription_item;
 CREATE TRIGGER trg_enforce_r6_prescription
 BEFORE INSERT OR UPDATE ON prescription_item
 FOR EACH ROW
 EXECUTE FUNCTION fn_check_completed_appointment();
 
 -- Trigger now guards both INSERT and UPDATE operations
+DROP TRIGGER IF EXISTS trg_enforce_r6_review ON review;
 CREATE TRIGGER trg_enforce_r6_review
 BEFORE INSERT OR UPDATE ON review
 FOR EACH ROW

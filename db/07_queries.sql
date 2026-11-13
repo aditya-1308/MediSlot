@@ -1,7 +1,7 @@
 -- ============================================================================
 -- MediSlot: Doctor Appointment Booking System
 -- Group 6 | Priyadarshini Ghosh
--- File: db/06_queries.sql
+-- File: db/07_queries.sql
 -- Description:Analytical Queries (q1 to q6)
 -- ============================================================================
 
