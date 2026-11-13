@@ -10,29 +10,30 @@ MediSlot is a web app where patients search for a doctor by specialty and city, 
 
 | Member                | Roll number   | Contribution |
 | --------------------- | ------------- | ------------ |
-| Mohammad Mubeen Khan  | 2024A8PS0489H | Booking transaction and app core: `sp_book_appointment`, `sp_cancel_appointment`, `fn_refund_amount`, R1/R3 insert trigger, slot-status sync trigger, row and advisory locking, seeding bypass (`db/03_booking.sql`), booking tests and two-session race demo (`db/tests/test_booking.sql`, `db/tests/race/`), Express core (pool, JWT, bcrypt, `requireRole`, transactional signup, `errors.js`), React shell and booking pages |
-| Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`) |
-| Priyadarshini Ghosh   | 2024A8PS0479H | TODO         |
-| Potta Avinash         | 2024A8PS0473H | TODO         |
-| Suryanath A           | 2024A8PS0471H | Clinical records and QA: Enforcement of Rule 6 via `BEFORE INSERT OR UPDATE` triggers (`db/04_clinical.sql`), clinical test suite (`db/tests/test_clinical.sql`), |
+| Mohammad Mubeen Khan  | 2024A8PS0489H | Booking transaction and app core: `sp_book_appointment`, `sp_cancel_appointment`, `fn_refund_amount`, R1/R3 insert trigger, slot-status sync trigger, row and advisory locking, seeding bypass (`db/03_booking.sql`), booking tests and two-session race demo (`db/tests/test_booking.sql`, `db/tests/race/`), Express core (pool, JWT, bcrypt, `requireRole`, transactional signup, `errors.js`), React shell and booking pages (`report/mubeen.md`) |
+| Aditya Singh          | 2024A8PS0491H | Schema and scheduling: Core tables (`db/01_tables.sql`), composite FK (R8), GiST exclusion constraint (R2), availability overlap/divisibility trigger (R4), status lifecycle trigger (R5), `sp_generate_slots` (`db/02_schedule.sql`), schedule unit tests (`db/tests/test_schedule.sql`), doctor API (`server/routes/doctor.js`), and doctor frontend (`report/aditya.md`) |
+| Priyadarshini Ghosh   | 2024A8PS0479H | Reporting views and admin management: Analytical views (`v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue` in `db/05_reports.sql`), analytical queries Q1–Q6 (`db/07_queries.sql`), admin backend API (`server/routes/admin.js`), admin dashboard, catalogue management, and report viewer (`client/src/pages/admin/`, `report/priyadarshini.md`) |
+| Potta Avinash         | 2024A8PS0473H | Seed data, performance indexing, and search: Transaction-consistent seed dataset (500+ records, 30 doctors, 120 patients in `db/seed.sql`), performance indexes and EXPLAIN plans (`db/06_indexes.sql`), window query Q7 (`queries/q7_next_free_slots.sql`), doctor search API (`server/routes/search.js`), and patient search UI (`client/src/pages/search/`, `report/avinash.md`) |
+| Suryanath A           | 2024A8PS0471H | Clinical records, Rule 6 enforcement and QA: R6 completed-visit enforcement triggers (`db/04_clinical.sql`), clinical test suite (`db/tests/test_clinical.sql`), automated runner (`db/tests/runall.sh`), clinical API (`server/routes/clinical.js`), and prescription/review UI (`client/src/pages/clinical/`, `report/suryanath.md`) |
 
 ---
 
-## Current progress (mid-semester)
+## Current progress
 
-Completed: requirements and business rules, the ER diagram (below), relational mapping, normalisation, the full schema with triggers, functions, views and indexes, and a passing test script (39 checks on PostgreSQL 16). In progress: seed data. Planned: Express API, React frontend, admin reports, integration.
+All phases completed end-to-end: full relational database schema, integrity constraints and stored procedures, automated test suites, realistic seed dataset, Express backend API, and responsive React frontend.
 
-| Component                                          | State       |
-| -------------------------------------------------- | ----------- |
-| Requirements and business rules (R1 to R9)         | Done        |
-| ER diagram and relational mapping                  | Done        |
-| Normalisation (all 12 relations in BCNF)           | Done        |
-| Schema: 12 tables, 6 triggers, 4 functions, 3 views | Done        |
-| Test script (39 checks covering R1 to R9)          | Done        |
-| Seed data (500+ records)                           | In progress |
-| Express API and JWT authentication                 | Planned     |
-| React (Vite) frontend                              | Planned     |
-| Admin reports and constraint demo                  | Planned     |
+| Component                                           | State |
+| --------------------------------------------------- | ----- |
+| Requirements and business rules (R1 to R9)          | Done  |
+| ER diagram and relational mapping                   | Done  |
+| Normalisation (all 12 relations in BCNF)            | Done  |
+| Schema: 12 tables, 8 triggers, 6 functions, 5 views | Done  |
+| Performance indexes (5 custom B-tree & partial)     | Done  |
+| Test suite (booking, schedule, clinical tests)      | Done  |
+| Seed data (500+ records across 30 doctors/120 pts)  | Done  |
+| Express API, JWT auth, role guards & error mapping  | Done  |
+| React (Vite) frontend (patient, doctor, admin flows)| Done  |
+| Admin analytics reports & analytical queries Q1–Q7  | Done  |
 
 ---
 
@@ -222,17 +223,18 @@ MediSlot/
     02_schedule.sql          availability trigger (R4), status lifecycle (R5), sp_generate_slots
     03_booking.sql           booking transactions, cancellation, refund calculation
     04_clinical.sql          prescriptions & reviews (R6)
-    05_reports.sql           views & analytical queries
+    05_reports.sql           reporting views (doctor utilisation, specialty demand, clinic revenue)
     06_indexes.sql           performance indexes
+    07_queries.sql           analytical queries (Q1–Q6)
     seed.sql                 seed data (500+ records)
     tests/
-      test_schedule.sql      unit test suite for R2, R4, R5, R8 & slot generation
-      test_booking.sql       booking test suite (R1, R3, R7, R9)
+      test_schedule.sql      unit test suite for R2, R4, R5, R8 & slot generation (40 assertions)
+      test_booking.sql       booking test suite (R1, R3, R7, R9, 27 assertions)
       test_clinical.sql      clinical test suite (R6)
-      run_all.sh             automated runner across 01-06 on fresh DB
-  routes/                    Express route handlers (doctor.js, booking.js, etc.)
-  pages/                     React frontend pages (doctor/, booking/, etc.)
-  report/                    final report sections
+      runall.sh              automated runner across 01-07 on fresh DB
+  server/                    Express backend (auth, booking, doctor, clinical, admin, search)
+  client/                    React Vite frontend (patient, doctor, admin portals)
+  report/                    individual contribution reports (mubeen, aditya, avinash, priyadarshini, suryanath)
 ```
 
 ## Setup (database)

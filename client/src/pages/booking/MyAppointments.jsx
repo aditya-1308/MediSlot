@@ -69,6 +69,11 @@ export default function MyAppointments() {
             </div>
             <div className="right">
               <span className={`pill ${a.status.toLowerCase()}`}>{a.status.replace('_', ' ')}</span>
+              {a.status === 'COMPLETED' && (
+                <Link className="button secondary" to={`/visits/${a.appt_id}/prescription`}>
+                  Prescription & Review
+                </Link>
+              )}
               <div className="small">
                 Paid {formatRupees(a.amount)} by {a.method}
                 {Number(a.refund_amount) > 0 && <> · refunded {formatRupees(a.refund_amount)}</>}

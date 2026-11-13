@@ -34,7 +34,9 @@ export default function Login() {
         {error && <p className="error">{error}</p>}
         <button disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</button>
       </form>
-      <p className="muted">New patient? <Link to="/signup">Create an account</Link></p>
+      <p className="muted">
+        New patient? <Link to="/signup">Create an account</Link> · Doctor? <Link to="/signup/doctor">Register here</Link>
+      </p>
     </div>
   );
 }
