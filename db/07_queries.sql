@@ -115,8 +115,8 @@ HAVING COUNT(DISTINCT a.appt_id) > 1
 ORDER BY total_bookings DESC;
 
 -- ----------------------------------------------------------------------------
--- q5: Most Prescribed Medicines per Specialty (4-table join)
--- This query joins specialty, appointment, prescription_item, and medicine to rank top prescribed drugs.
+-- q5: Most Prescribed Medicines per Specialty
+-- This query joins specialty, appointment, slot, prescription_item, doctor and medicine to rank top prescribed drugs.
 -- ----------------------------------------------------------------------------
 SELECT 
     sp.name AS specialty_name,
