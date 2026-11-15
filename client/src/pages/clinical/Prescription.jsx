@@ -29,8 +29,8 @@ export default function Prescription() {
     setLoading(true);
     setError('');
     Promise.all([
-      api.get(`/clinical/visits/${apptId}/prescription`),
-      api.get('/clinical/medicines'),
+      api.get(`/visits/${apptId}/prescription`),
+      api.get('/medicines'),
     ])
       .then(([pItems, meds]) => {
         setItems(pItems || []);
@@ -54,7 +54,7 @@ export default function Prescription() {
     setNotice('');
     setBusy(true);
     try {
-      await api.post(`/clinical/visits/${apptId}/prescription`, {
+      await api.post(`/visits/${apptId}/prescription`, {
         medicineId: Number(medId),
         dosage: dosage.trim() || null,
         days_supply: Number(daysSupply) || null,
@@ -75,7 +75,7 @@ export default function Prescription() {
     setError('');
     setNotice('');
     try {
-      await api.del(`/clinical/visits/${apptId}/prescription/${medicineId}`);
+      await api.del(`/visits/${apptId}/prescription/${medicineId}`);
       setNotice('Prescription item removed.');
       load();
     } catch (err) {
@@ -89,7 +89,7 @@ export default function Prescription() {
     setNotice('');
     setBusy(true);
     try {
-      await api.post(`/clinical/visits/${apptId}/review`, {
+      await api.post(`/visits/${apptId}/review`, {
         rating: Number(rating),
         comment: comment.trim() || null,
       });

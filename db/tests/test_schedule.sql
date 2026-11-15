@@ -48,7 +48,7 @@ BEGIN
     RETURNING clinic_id INTO v_clinic_id;
 
     INSERT INTO specialty (name)
-    VALUES ('General Medicine')
+    VALUES ('Schedule Test General Medicine')
     RETURNING specialty_id INTO v_spec_id;
 
     -- Doctors
