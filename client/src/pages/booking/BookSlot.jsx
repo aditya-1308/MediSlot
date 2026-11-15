@@ -3,7 +3,7 @@
 // database's own message (R1 slot taken, R3 clash, R9 started) is shown.
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api, formatRupees, formatWhen } from '../../api';
+import { api, dateParts, formatRupees, initials } from '../../api';
 
 const METHODS = [
   { value: 'UPI', label: 'UPI' },
@@ -44,56 +44,80 @@ export default function BookSlot() {
   }
 
   if (loadError) return <div className="page narrow"><p className="error">{loadError}</p></div>;
-  if (!slot) return <div className="page narrow"><p className="muted">Loading slot…</p></div>;
+  if (!slot) return <div className="page"><div className="skeleton" style={{ height: 260 }} /></div>;
 
   const started = new Date(slot.slot_start) <= new Date();
+  const start = dateParts(slot.slot_start);
+  const end = dateParts(slot.slot_end);
+  const paying = stage === 'paying';
 
   return (
-    <div className="page narrow">
-      <p className="muted"><Link to="/search">← Back to search</Link></p>
+    <div className="page">
+      <Link className="backlink" to="/search">← Back to search</Link>
       <h1>Book appointment</h1>
 
-      <section className="card">
-        <h2>{slot.doctor_name}</h2>
-        <p className="muted">{slot.specialty} · {slot.experience_yrs} yrs experience</p>
-        <dl className="facts">
-          <dt>When</dt><dd>{formatWhen(slot.slot_start)} – {new Date(slot.slot_end).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' })}</dd>
-          <dt>Where</dt><dd>{slot.clinic_name}, {slot.clinic_address}, {slot.city}</dd>
-          <dt>Fee</dt><dd><strong>{formatRupees(slot.fee)}</strong></dd>
-          <dt>Slot</dt><dd><span className={`pill ${slot.status.toLowerCase()}`}>{slot.status}</span></dd>
-        </dl>
-      </section>
+      <div className="book-grid">
+        <div>
+          <section className="card">
+            <div className="doctor-head">
+              <span className="avatar">{initials(slot.doctor_name)}</span>
+              <div>
+                <h2>{slot.doctor_name}</h2>
+                <div className="muted small">{slot.specialty} · {slot.experience_yrs} yrs experience</div>
+              </div>
+              <span style={{ marginLeft: 'auto' }} className={`pill ${slot.status.toLowerCase()}`}>{slot.status}</span>
+            </div>
+            <dl className="facts">
+              <dt>Date</dt><dd>{start.weekday}, {start.day} {start.month}</dd>
+              <dt>Time</dt><dd>{start.time} – {end.time}</dd>
+              <dt>Clinic</dt><dd>{slot.clinic_name}</dd>
+              <dt>Address</dt><dd>{slot.clinic_address}, {slot.city}</dd>
+            </dl>
+          </section>
 
-      <form className="card form" onSubmit={pay}>
-        <h2>Payment</h2>
-        <fieldset className="methods" disabled={stage === 'paying'}>
-          {METHODS.map((m) => (
-            <label key={m.value} className={`method ${method === m.value ? 'on' : ''}`}>
-              <input type="radio" name="method" value={m.value} checked={method === m.value} onChange={() => setMethod(m.value)} />
-              {m.label}
-            </label>
-          ))}
-        </fieldset>
-        <label>Reason for visit (optional)
-          <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={stage === 'paying'} />
-        </label>
-        <p className="muted small">
-          Cancellation: full refund 24 h or more before, 50% from 2 to 24 h, nothing under 2 h.
-        </p>
-        {error && (
-          <p className="error">
-            {error.rule && <span className="rule">{error.rule}</span>} {error.message}
-          </p>
-        )}
-        <button disabled={stage === 'paying'}>
-          {stage === 'paying' ? 'Processing payment…' : `Pay ${formatRupees(slot.fee)} and book`}
-        </button>
-        {(slot.status !== 'FREE' || started) && (
-          <p className="muted small">
-            This slot looks {started ? 'already started' : 'taken'}; you can still try, and the database will decide.
-          </p>
-        )}
-      </form>
+          <section className="card">
+            <h2>Cancellation policy</h2>
+            <p className="muted small" style={{ marginTop: 0 }}>Refunds are worked out by the database at the moment you cancel.</p>
+            <div className="policy">
+              <div><b>100%</b>24 h or more before</div>
+              <div><b>50%</b>2 to 24 h before</div>
+              <div><b>0%</b>under 2 h</div>
+            </div>
+          </section>
+        </div>
+
+        <form className="card form summary" onSubmit={pay}>
+          <h2>Payment</h2>
+          <fieldset className="methods" disabled={paying}>
+            {METHODS.map((m) => (
+              <label key={m.value} className={`method ${method === m.value ? 'on' : ''}`}>
+                <input type="radio" name="method" value={m.value} checked={method === m.value} onChange={() => setMethod(m.value)} />
+                {m.label}
+              </label>
+            ))}
+          </fieldset>
+          <label><span>Reason for visit <span className="muted small">(optional)</span></span>
+            <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} disabled={paying} placeholder="e.g. follow-up, chest pain, routine check-up" />
+          </label>
+          <div className="total">
+            <span className="muted">Consultation fee</span>
+            <strong>{formatRupees(slot.fee)}</strong>
+          </div>
+          {error && (
+            <p className="error">
+              {error.rule && <span className="rule">{error.rule}</span>}{error.message}
+            </p>
+          )}
+          <button className="block" disabled={paying}>
+            {paying ? <><span className="spinner" /> Processing payment…</> : `Pay ${formatRupees(slot.fee)} and book`}
+          </button>
+          {(slot.status !== 'FREE' || started) && (
+            <p className="muted small" style={{ margin: 0 }}>
+              This slot looks {started ? 'already started' : 'taken'}; you can still try, and the database will decide.
+            </p>
+          )}
+        </form>
+      </div>
     </div>
   );
 }

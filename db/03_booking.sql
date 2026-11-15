@@ -47,6 +47,13 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql STABLE;
 
+-- Helper: show a timestamp in IST for error messages, whatever the session
+-- time zone is, e.g. 'Mon 16 Nov 2026, 09:00 AM IST'
+CREATE OR REPLACE FUNCTION fn_fmt_ist(p_ts TIMESTAMPTZ)
+RETURNS TEXT AS $$
+    SELECT to_char(p_ts AT TIME ZONE 'Asia/Kolkata', 'Dy DD Mon YYYY, HH12:MI AM') || ' IST';
+$$ LANGUAGE sql IMMUTABLE;
+
 -- ----------------------------------------------------------------------------
 -- 1. Rule R7: refund tiers
 -- 100% if cancelled 24 h or more before the slot, 50% from 2 h up to 24 h,
@@ -114,7 +121,7 @@ BEGIN
           AND tstzrange(s.slot_start, s.slot_end) && tstzrange(v_slot.slot_start, v_slot.slot_end)
     ) THEN
         RAISE EXCEPTION 'R3: Patient % already has an appointment overlapping % to %',
-            NEW.patient_id, v_slot.slot_start, v_slot.slot_end
+            NEW.patient_id, fn_fmt_ist(v_slot.slot_start), to_char(v_slot.slot_end AT TIME ZONE 'Asia/Kolkata', 'HH12:MI AM')
             USING ERRCODE = 'exclusion_violation';
     END IF;
 
@@ -204,7 +211,7 @@ BEGIN
     -- A CHECK cannot do this because it may not use the current time.
     IF v_slot.slot_start <= v_now AND NOT fn_is_seeding() THEN
         RAISE EXCEPTION 'R9: Slot % started at % and can no longer be booked',
-            p_slot_id, v_slot.slot_start
+            p_slot_id, fn_fmt_ist(v_slot.slot_start)
             USING ERRCODE = 'check_violation';
     END IF;
 
