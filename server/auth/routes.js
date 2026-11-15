@@ -15,6 +15,29 @@ const { requireRole, signToken } = require('./requireRole');
 
 const router = express.Router();
 
+// public: list clinics and specialties for signup form dropdowns
+router.get('/clinics', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      'SELECT clinic_id, name, city FROM clinic ORDER BY city, name'
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/specialties', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      'SELECT specialty_id, name FROM specialty ORDER BY name'
+    );
+    res.json(rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.post('/signup', async (req, res, next) => {
   try {
     const { fullName, email, phone, password, role } = req.body;
@@ -44,7 +67,20 @@ router.post('/signup', async (req, res, next) => {
           [u.user_id, role, dob || null, gender || null]
         );
       } else {
-        const { clinicId, specialtyId, licenseNo, fee, experienceYrs } = req.body;
+        let { clinicId, specialtyId, licenseNo, fee, experienceYrs,
+              newClinicName, newClinicAddress, newClinicCity } = req.body;
+
+        // create a new clinic on the fly if name provided
+        if (newClinicName && newClinicName.trim()) {
+          const cr = await client.query(
+            `INSERT INTO clinic(name, address, city) VALUES($1, $2, $3)
+             ON CONFLICT(name, address) DO UPDATE SET name=EXCLUDED.name
+             RETURNING clinic_id`,
+            [newClinicName.trim(), (newClinicAddress || '').trim(), (newClinicCity || '').trim()]
+          );
+          clinicId = cr.rows[0].clinic_id;
+        }
+
         await client.query(
           `INSERT INTO doctor (doctor_id, role, clinic_id, specialty_id, license_no, fee, experience_yrs)
            VALUES ($1, $2, $3, $4, $5, $6, $7)`,

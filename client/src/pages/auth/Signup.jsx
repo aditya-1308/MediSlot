@@ -58,7 +58,9 @@ export default function Signup() {
             {error && <p className="error">{error}</p>}
             <button className="block" disabled={busy}>{busy ? <><span className="spinner" /> Creating…</> : 'Create account'}</button>
           </form>
-          <p className="muted">Already registered? <Link to="/login">Log in</Link></p>
+          <p className="muted">
+            Already registered? <Link to="/login">Log in</Link> · Are you a doctor? <Link to="/signup/doctor">Register as doctor</Link>
+          </p>
         </div>
       </section>
     </div>

@@ -40,7 +40,8 @@ GROUP BY d.doctor_id, u.full_name, s.name, c.name, c.city;
 
 
 -- 2. v_specialty_demand
--- This tracks the overall demand and total doctors per specialty.
+-- was missing the create view wrapper
+CREATE OR REPLACE VIEW v_specialty_demand AS
 SELECT 
     sp.specialty_id,
     sp.name AS specialty_name,

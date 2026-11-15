@@ -15,6 +15,7 @@ import { RequireRole, useAuth } from './auth/AuthContext';
 import { initials } from './api';
 import Login from './pages/auth/Login';
 import Signup from './pages/auth/Signup';
+import DoctorSignup from './pages/auth/DoctorSignup';
 
 const modules = import.meta.glob('./pages/*/routes.jsx', { eager: true });
 const pageRoutes = Object.values(modules).flatMap((m) => m.default || []);
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/signup/doctor" element={<DoctorSignup />} />
           {pageRoutes.map((r) => (
             <Route
               key={r.path}

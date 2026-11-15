@@ -59,7 +59,9 @@ export default function Login() {
             {error && <p className="error">{error}</p>}
             <button className="block" disabled={busy}>{busy ? <><span className="spinner" /> Logging in…</> : 'Log in'}</button>
           </form>
-          <p className="muted">New patient? <Link to="/signup">Create an account</Link></p>
+          <p className="muted">
+            New patient? <Link to="/signup">Create an account</Link> · Doctor? <Link to="/signup/doctor">Register here</Link>
+          </p>
         </div>
       </section>
     </div>
