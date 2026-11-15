@@ -5,7 +5,9 @@
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React-Vite-61DAFB?logo=react&logoColor=black)
-![Tests](https://img.shields.io/badge/SQL%20tests-67%2B%20assertions-brightgreen)
+![Tests](https://img.shields.io/badge/SQL%20tests-71%20assertions-brightgreen)
+
+> **Final submission:** git tag `final` on branch `main`. The tagged commit's hash is recorded in the Demo Sheet.
 
 MediSlot is a web app where patients search for a doctor by specialty and city, pick a free slot, book it and pay. Doctors set a weekly schedule, see the day's patient list, mark visits done or missed and write prescriptions. An admin manages clinics, specialties and medicines, and watches reports on how busy each doctor is and where the money goes. The rules that matter most (no double booking, no overlapping appointments, refunds that match the payment, reviews only for visits that happened) are enforced by PostgreSQL through constraints, triggers and functions, so they hold no matter which client touches the data.
 
@@ -184,11 +186,10 @@ Things worth highlighting:
 - `prescribes` carries attributes, so it has its own table.
 - A slot can have many appointments over time, but only one at any moment.
 
-### Chen notation
+### Notation
 
-Rectangles are entities, double rectangles are weak entities, diamonds are relationships, double diamonds are identifying relationships. Labels 1, N, M are cardinalities.
+The diagrams below use crow's-foot notation and render directly on GitHub. The Chen-notation ER diagram is in the Database Design Document.
 
-[![ER diagram](docs/images/er_diagram.png)](docs/images/er_diagram.png)
 
 ### Same model as an ER diagram (renders on GitHub)
 
@@ -382,7 +383,7 @@ Two choices that keep the design out of 2NF/3NF trouble: `appointment` has no `d
 5. **`payment.amount` snapshots the doctor's fee** at booking time, because the fee changes over time and an old payment must keep what was actually charged.
 6. **Booking, cancelling and slot generation are SQL functions**, so any client (web app, script or test) gets the same guarantees and everything can be demoed from `psql`.
 7. **An advisory lock per patient** closes the one gap a row lock cannot: two simultaneous bookings by the same patient for two different slots at the same time. The row lock protects the slot, the advisory lock protects the patient (R3).
-8. **Tested.** `schema.sql` loads on PostgreSQL 16 and the SQL suites cover R1 to R9, including two sessions racing for the same slot: the second waits for the first to commit and is then rejected.
+8. **Tested.** The `db/01` to `db/07` scripts load on PostgreSQL 16 and the SQL suites cover R1 to R9, including two sessions racing for the same slot: the second waits for the first to commit and is then rejected.
 
 ---
 
@@ -431,7 +432,7 @@ The API stays thin on purpose: it checks the token and role, calls the SQL funct
 | Module | Responsibility |
 | --- | --- |
 | Core (`server/`) | Connection pool, JWT, bcrypt, `requireRole`, transactional signup, `errors.js` |
-| Booking routes | Book (`/api/booking/book`) and cancel, delegating to `sp_book_appointment` and `sp_cancel_appointment` |
+| Booking routes | Book (`POST /api/booking`) and cancel, delegating to `sp_book_appointment` and `sp_cancel_appointment` |
 | `server/routes/doctor.js` | Weekly availability, slot generation, the doctor's daily schedule, status updates |
 | `server/routes/search.js` | Doctor search by name, city, specialty and appointment date |
 | `server/routes/clinical.js` | Prescriptions and reviews |
@@ -453,7 +454,7 @@ The API stays thin on purpose: it checks the token and role, calls the SQL funct
 
 ### W1: Book an appointment (atomic transaction)
 
-The patient searches doctors by specialty, city, or date, chooses an available slot, and books via `/api/booking/book`. The backend invokes `sp_book_appointment`, which:
+The patient searches doctors by specialty, city, or date, chooses an available slot, and books via `POST /api/booking`. The backend invokes `sp_book_appointment`, which:
 
 1. Acquires a patient-level transactional advisory lock (`pg_advisory_xact_lock(4801, patient_id)`) to prevent concurrent overlapping bookings by the same patient.
 2. Locks the target slot row (`SELECT ... FOR UPDATE`), asserting current status is `FREE` and slot start time is strictly in the future (R9).
@@ -466,7 +467,7 @@ sequenceDiagram
     participant UI as React
     participant API as Express
     participant DB as PostgreSQL
-    UI->>API: POST /api/booking/book (slot, method)
+    UI->>API: POST /api/booking (slot, method)
     API->>DB: CALL sp_book_appointment(...)
     DB->>DB: advisory lock on patient (R3)
     DB->>DB: SELECT slot FOR UPDATE (R1)
@@ -508,10 +509,10 @@ The admin dashboard (`/admin`) provides platform-wide oversight:
 | Feature | Objects and implementation |
 | --- | --- |
 | **Transactions and concurrency** | Row-level locks (`SELECT ... FOR UPDATE`), transaction-level advisory locks (`pg_advisory_xact_lock(4801, patient_id)`), atomic multi-table stored procedures (`sp_book_appointment`, `sp_cancel_appointment`), READ COMMITTED isolation |
-| **Triggers (7)** | `trg_check_availability_overlap` (`availability`), `trg_check_appointment_clash` (`appointment`), `trg_sync_slot_status` (`appointment`), `trg_appointment_status_lifecycle` (`appointment`), `trg_protect_booked_slots` (`slot`), `trg_enforce_r6_prescription` (`prescription_item`), `trg_enforce_r6_review` (`review`) |
-| **Functions and procedures (7)** | `sp_book_appointment`, `sp_cancel_appointment`, `sp_generate_slots`, `sp_generate_all_slots`, `fn_refund_amount`, `fn_check_completed_appointment`, `fn_check_availability_overlap` |
+| **Triggers (6)** | `trg_check_availability_overlap` (`availability`, R4), `trg_appointment_before_insert` (`appointment`, R1/R3), `trg_sync_slot_status` (`appointment`), `trg_appointment_status_lifecycle` (`appointment`, R5), `trg_enforce_r6_prescription` (`prescription_item`), `trg_enforce_r6_review` (`review`) |
+| **Functions and procedures** | `sp_book_appointment`, `sp_cancel_appointment`, `fn_refund_amount` (R7), `sp_generate_slots`, `sp_generate_all_slots`, `sp_add_availability`, `sp_delete_availability`, `sp_set_appointment_status`, `sp_toggle_slot_block`, plus the trigger functions |
 | **Views (7)** | `v_slot_details`, `v_patient_appointments`, `v_doctor_appointments`, `v_doctor_profile`, `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue` |
-| **Indexes (7)** | GiST exclusion constraint (`slot_no_overlap`), partial unique index (`idx_appointment_slot_active`), partial B-tree (`idx_slot_doctor_start_status`), composite indexes (`idx_doctor_specialty_clinic`, `idx_appointment_patient`, `idx_payment_appt`, `idx_clinic_city`) |
+| **Indexes (7)** | GiST exclusion constraint (`excl_doctor_slot_overlap`), partial unique index (`idx_appointment_slot_active`), partial B-tree (`idx_slot_free_doctor_start`), composite and covering indexes (`idx_doctor_specialty_clinic`, `idx_appointment_patient_booked_at`, `idx_appointment_slot_all`, `idx_clinic_city`) |
 | **Constraints** | PK, FK with explicit `ON DELETE`, UNIQUE, CHECK, composite FK (R8), EXCLUDE (R2) |
 | **Extensions** | `btree_gist` (needed for the exclusion constraint on doctor plus time range) |
 
@@ -523,12 +524,12 @@ All seven analytical queries are implemented in `db/07_queries.sql` and `queries
 
 | Query | Question answered | Technique |
 | --- | --- | --- |
-| **Q1: Utilisation and no-show rate per clinic** | What are the booked slot counts and patient no-show rates across active clinics?[cite: 6] | `GROUP BY`, `HAVING COUNT(DISTINCT a.appt_id) > 0`, and `FILTER (WHERE ...)` conditional aggregation |
-| **Q2: Top specialties per city** | Which top 3 medical specialties have the highest booking demand in each city?[cite: 6] | CTE with `RANK() OVER (PARTITION BY c.city ORDER BY COUNT(DISTINCT a.appt_id) DESC)` |
-| **Q3: Doctors above their specialty average** | Which doctors complete more appointments than the average for their own specialty?[cite: 6] | Dual CTEs (`doctor_completed` and `specialty_avg`) with `AVG()` comparison |
-| **Q4: Repeat patients** | Which patients have booked more than one appointment, and across how many clinics?[cite: 6] | `GROUP BY` patient with `HAVING COUNT(DISTINCT a.appt_id) > 1` |
-| **Q5: Most prescribed medicines per specialty** | Which medicines and dosage forms are prescribed most frequently within each specialty?[cite: 6] | Multi-table join (`specialty` → `doctor` → `slot` → `appointment` → `prescription_item` → `medicine`) |
-| **Q6: Monthly revenue trend** | How do monthly gross revenue, refunds, and net collections trend per clinic?[cite: 6] | `GROUP BY TO_CHAR(p.paid_at, 'YYYY-MM'), c.name` with `SUM(p.amount - p.refund_amount)` |
+| **Q1: Utilisation and no-show rate per clinic** | What are the booked slot counts and patient no-show rates across active clinics? | `GROUP BY`, `HAVING COUNT(DISTINCT a.appt_id) > 0`, and `FILTER (WHERE ...)` conditional aggregation |
+| **Q2: Top specialties per city** | Which top 3 medical specialties have the highest booking demand in each city? | CTE with `RANK() OVER (PARTITION BY c.city ORDER BY COUNT(DISTINCT a.appt_id) DESC)` |
+| **Q3: Doctors above their specialty average** | Which doctors complete more appointments than the average for their own specialty? | Dual CTEs (`doctor_completed` and `specialty_avg`) with `AVG()` comparison |
+| **Q4: Repeat patients** | Which patients have booked more than one appointment, and across how many clinics? | `GROUP BY` patient with `HAVING COUNT(DISTINCT a.appt_id) > 1` |
+| **Q5: Most prescribed medicines per specialty** | Which medicines and dosage forms are prescribed most frequently within each specialty? | Multi-table join (`specialty` → `doctor` → `slot` → `appointment` → `prescription_item` → `medicine`) |
+| **Q6: Monthly revenue trend** | How do monthly gross revenue, refunds, and net collections trend per clinic? | `GROUP BY TO_CHAR(p.paid_at, 'YYYY-MM'), c.name` with `SUM(p.amount - p.refund_amount)` |
 | **Q7: Next three free slots per doctor** | What can a patient book soonest, per doctor? | `ROW_NUMBER() OVER (PARTITION BY s.doctor_id ORDER BY s.slot_start)` |
 
 Q7 is validated with before/after `EXPLAIN ANALYZE` benchmarks in `db/explain/`, showing the speed-up from index-only scans.
@@ -541,12 +542,12 @@ Indexes were added after looking at the query plans, not before. The workflow wa
 
 | Index | Serves |
 | --- | --- |
-| `idx_slot_doctor_start_status` (partial, `WHERE status = 'FREE'`) | Free-slot search and Q7: only free slots are indexed, so the index stays small |
+| `idx_slot_free_doctor_start` (partial, `WHERE status = 'FREE'`) | Free-slot search and Q7: only free slots are indexed, so the index stays small |
 | `idx_doctor_specialty_clinic` | Search by specialty and clinic |
-| `idx_appointment_patient` | A patient's appointment history and the R3 clash check |
-| `idx_payment_appt` | Joining payments to appointments in revenue reports |
+| `idx_appointment_patient_booked_at` (covering) | A patient's appointment history, newest first |
+| `idx_appointment_slot_all` (covering) | Reports that count all appointments per slot, including cancelled ones |
 | `idx_clinic_city` | City filter in doctor search |
-| `slot_no_overlap` (GiST) | R2 enforcement, and time-range lookups per doctor |
+| `excl_doctor_slot_overlap` (GiST) | R2 enforcement, and time-range lookups per doctor |
 | `idx_appointment_slot_active` (partial unique) | R1 enforcement |
 
 ---
@@ -557,12 +558,12 @@ The database includes a realistic dataset defined in `db/seed.sql`, comprising 5
 
 | Entity | Count | Notes |
 | --- | --- | --- |
-| Clinics | 6 | Hyderabad, Bengaluru, Mumbai |
+| Clinics | 6 | Bengaluru, Chennai, Hyderabad, Kolkata, Mumbai, Pune |
 | Specialties | 12 | Cardiology, Dermatology, Orthopedics, Pediatrics, and more |
 | Doctors | 30 | Licence numbers, experience, consultation fees |
 | Patients | 120 | Demographics and dates of birth |
 | Medicines | 25 | Forms: `TABLET`, `CAPSULE`, `SYRUP`, `INJECTION`, `OINTMENT`, `DROPS`, `OTHER` |
-| Slots | 2,000+ | Generated from weekly doctor availability patterns |
+| Slots | 31,000+ | Generated from weekly doctor availability patterns |
 | Appointments | 400 | With payments, seeded through `sp_book_appointment` and `sp_cancel_appointment` |
 | Prescription items | 250 | |
 | Reviews | 120 | |
@@ -694,9 +695,8 @@ After loading `db/seed.sql`:
 | --- | --- | --- |
 | Patient | `patient1@medislot.demo` to `patient120@medislot.demo` | `demo1234` |
 | Doctor | `doctor1@medislot.demo` to `doctor30@medislot.demo` | `demo1234` |
-| Admin | `admin@medislot.demo` | `admin123` |
+| Admin | `admin@medislot.demo` | `demo1234` |
 
-Seeded users need bcrypt password hashes to be able to log in, for example `crypt('password', gen_salt('bf'))` from `pgcrypto`.
 
 ---
 
