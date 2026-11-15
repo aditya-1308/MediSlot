@@ -482,10 +482,12 @@ sequenceDiagram
 
 The admin dashboard (`/admin`) provides platform-wide oversight:
 
-1. System metrics cards: registered clinics, specialties, medicines, doctor and patient counts, active bookings, and net revenue.
-2. Master catalogue management: interactive CRUD for medical specialties and medicines (form, dosage, strength).
-3. Clinics overview: view doctor counts per clinic registered by doctors.
-4. Reporting suite: real-time query rendering for `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue`, and analytical queries Q1 to Q7.
+1. Clinic metrics cards: doctor counts, open future slots, upcoming bookings, past appointments, specialty/medicine catalogue totals, and net revenue after refunds, alongside specialty demand and recent appointment summaries.
+2. Doctor management: add and edit clinic doctors (contact details, specialty, license number, consultation fee, experience, and login credentials) with live search filtering.
+3. Appointment slot scheduling: create single or auto-split consultation slots with overlap validation, edit timings, and delete unbooked slots, filterable by doctor, specialty, date, and booking status.
+4. Appointment tracking: filter clinic appointments across `Upcoming`, `Past`, and `All` tabs with keyword search and expandable patient, slot, visit reason, and payment/refund details.
+5. Master catalogue management: interactive CRUD for medical specialties and prescription medicines (name, dosage form, and strength).
+6. Reporting suite: real-time query rendering for `v_doctor_utilisation`, `v_specialty_demand`, `v_clinic_revenue`, and analytical queries Q1 to Q7.
 
 ### W3: Clinical records and Rule 6 demonstration
 
@@ -521,12 +523,12 @@ All seven analytical queries are implemented in `db/07_queries.sql` and `queries
 
 | Query | Question answered | Technique |
 | --- | --- | --- |
-| **Q1: Peak booking hours** | At which hours of the day are slots booked most? | `GROUP BY EXTRACT(HOUR FROM s.slot_start)` |
-| **Q2: Doctor performance vs specialty benchmark** | Which doctors beat the average rating of their own specialty? | CTEs and subqueries |
-| **Q3: Top doctors by completed visits** | Who handles the most completed visits, with ties ranked fairly? | `DENSE_RANK() OVER (ORDER BY completed_count DESC)` |
-| **Q4: Patient retention** | Which patients keep returning to the same doctor? | Group by `(patient_id, doctor_id)`, `HAVING COUNT(a.appt_id) >= 2` |
-| **Q5: Revenue by payment method** | Gross revenue, refund liability and net revenue per `CASH`, `CARD`, `UPI` | Conditional aggregation |
-| **Q6: Doctor cancellation rate** | Which practitioners have elevated cancellation frequency? | Conditional aggregation and `HAVING` |
+| **Q1: Utilisation and no-show rate per clinic** | What are the booked slot counts and patient no-show rates across active clinics?[cite: 6] | `GROUP BY`, `HAVING COUNT(DISTINCT a.appt_id) > 0`, and `FILTER (WHERE ...)` conditional aggregation |
+| **Q2: Top specialties per city** | Which top 3 medical specialties have the highest booking demand in each city?[cite: 6] | CTE with `RANK() OVER (PARTITION BY c.city ORDER BY COUNT(DISTINCT a.appt_id) DESC)` |
+| **Q3: Doctors above their specialty average** | Which doctors complete more appointments than the average for their own specialty?[cite: 6] | Dual CTEs (`doctor_completed` and `specialty_avg`) with `AVG()` comparison |
+| **Q4: Repeat patients** | Which patients have booked more than one appointment, and across how many clinics?[cite: 6] | `GROUP BY` patient with `HAVING COUNT(DISTINCT a.appt_id) > 1` |
+| **Q5: Most prescribed medicines per specialty** | Which medicines and dosage forms are prescribed most frequently within each specialty?[cite: 6] | Multi-table join (`specialty` → `doctor` → `slot` → `appointment` → `prescription_item` → `medicine`) |
+| **Q6: Monthly revenue trend** | How do monthly gross revenue, refunds, and net collections trend per clinic?[cite: 6] | `GROUP BY TO_CHAR(p.paid_at, 'YYYY-MM'), c.name` with `SUM(p.amount - p.refund_amount)` |
 | **Q7: Next three free slots per doctor** | What can a patient book soonest, per doctor? | `ROW_NUMBER() OVER (PARTITION BY s.doctor_id ORDER BY s.slot_start)` |
 
 Q7 is validated with before/after `EXPLAIN ANALYZE` benchmarks in `db/explain/`, showing the speed-up from index-only scans.
